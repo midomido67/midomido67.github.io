@@ -528,9 +528,9 @@
         </div>
         <div class="method-note">
           <strong>一意解の構成方法</strong><br>
-          行・列をランダムに並べた階段状の基準盤を作り、seedによって盤面全体の青・赤を反転します。
-          青数は0～N-1または1～Nのどちらかとなり、端の青数から確定が連鎖するため、加算ヒントだけでも解は1つです。
-          この色極性の切り替えにより、全赤ラインの`+0 S`は出現する場合としない場合があります。
+          全赤・全青ではないS／Tアンカーを1行・1列ずつ配置し、そこから加算ヒントで確定できる行・列を交互に構成します。
+          アンカーと確定済みセルから次のラインの未確定部分が全青または全赤だと一意に決まり、盤面全体へ確定が連鎖します。
+          完成後に全赤・全青ラインがないことと、この確定連鎖で全セルが一意に決まることを再検証します。
           正解盤のS成立行数・列数が各軸の半分以下であることを確認した後、×／S／Tを計算して難易度別に採用します。
           全行または全列がSとなる候補は採用しません。
           観測チケットはこの検証HTML用にEasy 5枚、Normal 3枚、Hard 2枚を付与します。
@@ -616,6 +616,7 @@
         normal: 3,
         hard: 2,
       };
+      const LINE_SOLUTION_CACHE = new Map();
 
       function createRandom(seed) {
         let state = seed >>> 0;
@@ -726,8 +727,8 @@
         };
       }
 
-      function selectHints(fullHints, difficulty, lineIndex, axis) {
-        if (difficulty === 'easy') {
+      function selectHints(fullHints, difficulty, lineIndex, axis, forceAll = false) {
+        if (difficulty === 'easy' || forceAll) {
           return [...fullHints];
         }
 
@@ -755,61 +756,214 @@
         return [...new Set(selected)];
       }
 
+      function createAnchorPattern(size) {
+        const runLength = (size / 2) - 1;
+        return `${'1'.repeat(runLength)}00${'1'.repeat(runLength)}`;
+      }
+
+      function isUniformLine(line) {
+        return [...line].every((value) => value === line[0]);
+      }
+
+      function completionBit(knownValues, random) {
+        if (knownValues.every((value) => value === '0')) return '1';
+        if (knownValues.every((value) => value === '1')) return '0';
+        return random() < 0.5 ? '0' : '1';
+      }
+
       function constructBoard(size, random) {
-        const values = Array.from({ length: size }, (_, index) => index);
-        const colorInverted = random() < 0.5;
-        let best = null;
+        const indices = Array.from({ length: size }, (_, index) => index);
+        const anchorPattern = createAnchorPattern(size);
 
         for (let attempt = 1; attempt <= 1000; attempt += 1) {
-          const baseRowDegrees = shuffled(values, random);
-          const columnRanks = shuffled(values, random);
-          const baseRows = baseRowDegrees.map(
-            (degree) => columnRanks.map((rank) => (rank < degree ? '1' : '0')).join(''),
+          const board = Array.from(
+            { length: size },
+            () => Array(size).fill(null),
           );
-          const rows = colorInverted
-            ? baseRows.map((row) => [...row].map((value) => (value === '1' ? '0' : '1')).join(''))
-            : baseRows;
+          const anchorRow = Math.floor(random() * size);
+          const anchorCellValue = anchorPattern[anchorRow];
+          const compatibleColumns = indices.filter(
+            (column) => anchorPattern[column] === anchorCellValue,
+          );
+          const anchorColumn = compatibleColumns[
+            Math.floor(random() * compatibleColumns.length)
+          ];
+
+          [...anchorPattern].forEach((value, column) => {
+            board[anchorRow][column] = value;
+          });
+          [...anchorPattern].forEach((value, row) => {
+            board[row][anchorColumn] = value;
+          });
+
+          const rowOrder = shuffled(
+            indices.filter((row) => row !== anchorRow),
+            random,
+          );
+          const columnOrder = shuffled(
+            indices.filter((column) => column !== anchorColumn),
+            random,
+          );
+          const deductionTrace = [
+            { axis: 'row', index: anchorRow, reason: 'anchor' },
+            { axis: 'column', index: anchorColumn, reason: 'anchor' },
+          ];
+
+          for (let step = 0; step < columnOrder.length; step += 1) {
+            const column = columnOrder[step];
+            const knownColumnValues = indices
+              .map((row) => board[row][column])
+              .filter((value) => value !== null);
+            const columnFill = completionBit(knownColumnValues, random);
+            indices.forEach((row) => {
+              if (board[row][column] === null) {
+                board[row][column] = columnFill;
+              }
+            });
+            deductionTrace.push({ axis: 'column', index: column, reason: 'add' });
+
+            if (step < rowOrder.length - 1) {
+              const row = rowOrder[step];
+              const knownRowValues = board[row].filter((value) => value !== null);
+              const rowFill = completionBit(knownRowValues, random);
+              indices.forEach((columnIndex) => {
+                if (board[row][columnIndex] === null) {
+                  board[row][columnIndex] = rowFill;
+                }
+              });
+              deductionTrace.push({ axis: 'row', index: row, reason: 'add' });
+            }
+          }
+
+          if (board.some((row) => row.some((value) => value === null))) {
+            continue;
+          }
+
+          const rows = board.map((row) => row.join(''));
           const columns = columnsFromRows(rows);
+          if (rows.some(isUniformLine) || columns.some(isUniformLine)) {
+            continue;
+          }
           const symmetry = symmetryQuality(rows, columns);
           if (!symmetry.accepted) {
             continue;
           }
           const rowFullHints = rows.map(availableHints);
           const columnFullHints = columns.map(availableHints);
-          const rowDegrees = rows.map(
-            (row) => [...row].filter((value) => value === '1').length,
-          );
-          const rowS = symmetry.symmetryEligibleRowCount;
-          const columnS = symmetry.symmetryEligibleColumnCount;
-          const rowT = rowFullHints.filter((hints) => hints.includes('T')).length;
-          const columnT = columnFullHints.filter((hints) => hints.includes('T')).length;
-          const score = (rowT > 0 ? 1000 : 0)
-            + (columnT > 0 ? 1000 : 0)
-            - ((rowS - 1) + (columnS - 1)) * 20;
-          const candidate = {
+          const anchorHints = availableHints(anchorPattern);
+          if (anchorHints.length !== 4
+            || !anchorHints.every((hint) => rowFullHints[anchorRow].includes(hint))
+            || !anchorHints.every((hint) => columnFullHints[anchorColumn].includes(hint))) {
+            continue;
+          }
+
+          return {
             rows,
             columns,
-            rowDegrees,
-            columnRanks,
             rowFullHints,
             columnFullHints,
             symmetry,
-            colorInverted,
+            anchorPattern,
+            anchorRow,
+            anchorColumn,
+            deductionTrace,
             attempt,
-            score,
           };
+        }
+        throw new Error('一様ラインを使わない一意解盤面を生成できませんでした。');
+      }
 
-          if (!best || candidate.score > best.score) {
-            best = candidate;
-          }
-          if (rowS === 1 && columnS === 1 && rowT > 0 && columnT > 0) {
-            return candidate;
+      function lineCoordinates(size, axis, index) {
+        return Array.from({ length: size }, (_, offset) => (
+          axis === 'row'
+            ? { row: index, column: offset }
+            : { row: offset, column: index }
+        ));
+      }
+
+      function matchingLineSolutions(size, hints) {
+        const cacheKey = `${size}:${[...hints].sort().join('|')}`;
+        if (LINE_SOLUTION_CACHE.has(cacheKey)) {
+          return [...LINE_SOLUTION_CACHE.get(cacheKey)];
+        }
+        const solutions = [];
+        const patternCount = 2 ** size;
+        for (let mask = 0; mask < patternCount && solutions.length < 2; mask += 1) {
+          const pattern = mask.toString(2).padStart(size, '0');
+          const generated = availableHints(pattern);
+          if (hints.every((hint) => generated.includes(hint))) {
+            solutions.push(pattern);
           }
         }
-        if (!best) {
-          throw new Error('S成立ライン品質ゲートを満たす正解盤を生成できませんでした。');
+        LINE_SOLUTION_CACHE.set(cacheKey, solutions);
+        return [...solutions];
+      }
+
+      function validateDeductionTrace(problem) {
+        const { size, answer, rowHints, columnHints, validation } = problem;
+        const trace = validation.deductionTrace;
+        const anchorPattern = validation.anchorPattern;
+        if (!Array.isArray(trace) || trace.length < 3) {
+          throw new Error('一意性検証用の確定連鎖がありません。');
         }
-        return best;
+        const known = Array.from(
+          { length: size },
+          () => Array(size).fill(false),
+        );
+
+        trace.forEach((step, traceIndex) => {
+          const coordinates = lineCoordinates(size, step.axis, step.index);
+          const shown = step.axis === 'row'
+            ? rowHints[step.index]
+            : columnHints[step.index];
+          if (step.reason === 'anchor') {
+            const line = coordinates
+              .map(({ row, column }) => answer[row][column])
+              .join('');
+            const requiredHints = availableHints(anchorPattern);
+            const anchorSolutions = matchingLineSolutions(size, requiredHints);
+            if (line !== anchorPattern
+              || requiredHints.length !== 4
+              || requiredHints.some((hint) => !shown.includes(hint))
+              || anchorSolutions.length !== 1
+              || anchorSolutions[0] !== anchorPattern) {
+              throw new Error(`${traceIndex + 1}番目の非一様アンカーが一意に確定しません。`);
+            }
+            coordinates.forEach(({ row, column }) => {
+              known[row][column] = true;
+            });
+            return;
+          }
+
+          const unknown = coordinates.filter(({ row, column }) => !known[row][column]);
+          if (unknown.length === 0) {
+            throw new Error(`${traceIndex + 1}番目の確定連鎖に未確定セルがありません。`);
+          }
+          const addHint = shown.find((hint) => hint.startsWith('+'));
+          if (!addHint) {
+            throw new Error(`${traceIndex + 1}番目の確定連鎖に加算ヒントがありません。`);
+          }
+          const totalBlue = Number(addHint.slice(1));
+          const knownBlue = coordinates.filter(
+            ({ row, column }) => known[row][column] && answer[row][column] === '1',
+          ).length;
+          const remainingBlue = totalBlue - knownBlue;
+          if (remainingBlue !== 0 && remainingBlue !== unknown.length) {
+            throw new Error(`${traceIndex + 1}番目のラインを加算ヒントで一意確定できません。`);
+          }
+          const forcedValue = remainingBlue === 0 ? '0' : '1';
+          if (unknown.some(({ row, column }) => answer[row][column] !== forcedValue)) {
+            throw new Error(`${traceIndex + 1}番目の確定連鎖と正解盤が一致しません。`);
+          }
+          coordinates.forEach(({ row, column }) => {
+            known[row][column] = true;
+          });
+        });
+
+        if (known.some((row) => row.some((value) => !value))) {
+          throw new Error('確定連鎖だけでは全セルを一意に確定できません。');
+        }
+        return true;
       }
 
       function validateConstructedProblem(problem, fullRowHints, fullColumnHints) {
@@ -822,6 +976,9 @@
         }
 
         const columns = columnsFromRows(answer);
+        if (answer.some(isUniformLine) || columns.some(isUniformLine)) {
+          throw new Error('全赤または全青のラインが含まれています。');
+        }
         const symmetry = symmetryQuality(answer, columns);
         if (!symmetry.accepted) {
           throw new Error(
@@ -847,41 +1004,10 @@
           }
         });
 
-        const rowDegrees = answer.map((row) => [...row].filter((value) => value === '1').length);
-        const columnDegrees = columns.map(
-          (column) => [...column].filter((value) => value === '1').length,
-        );
-        const zeroAnchoredDegrees = Array.from({ length: size }, (_, index) => index);
-        const fullAnchoredDegrees = Array.from({ length: size }, (_, index) => index + 1);
-        const sortedRowDegrees = [...rowDegrees].sort((a, b) => a - b);
-        const sortedColumnDegrees = [...columnDegrees].sort((a, b) => a - b);
-        const isSameDegreeProfile = (degrees, expected) => (
-          JSON.stringify(degrees) === JSON.stringify(expected)
-        );
-        const zeroAnchored = isSameDegreeProfile(sortedRowDegrees, zeroAnchoredDegrees)
-          && isSameDegreeProfile(sortedColumnDegrees, zeroAnchoredDegrees);
-        const fullAnchored = isSameDegreeProfile(sortedRowDegrees, fullAnchoredDegrees)
-          && isSameDegreeProfile(sortedColumnDegrees, fullAnchoredDegrees);
-        if (!zeroAnchored && !fullAnchored) {
-          throw new Error('一意解を保証する青数列になっていません。');
-        }
-
-        answer.forEach((row, rowIndex) => {
-          [...row].forEach((value, columnIndex) => {
-            const degreeSum = rowDegrees[rowIndex] + columnDegrees[columnIndex];
-            const reconstructed = zeroAnchored
-              ? (degreeSum >= size ? '1' : '0')
-              : (degreeSum > size ? '1' : '0');
-            if (value !== reconstructed) {
-              throw new Error('加算ヒントからの一意再構成に失敗しました。');
-            }
-          });
-        });
-
         if (shownHints.some((hints) => !hints[0].startsWith('+'))) {
           throw new Error('標準難易度の一意解を保証する加算ヒントが不足しています。');
         }
-        return true;
+        return validateDeductionTrace(problem);
       }
 
       function generateData(size, difficulty, seed) {
@@ -891,15 +1017,27 @@
         const random = createRandom(normalizedSeed);
         const constructed = constructBoard(normalizedSize, random);
         const rowHints = constructed.rowFullHints.map(
-          (hints, index) => selectHints(hints, normalizedDifficulty, index, 'row'),
+          (hints, index) => selectHints(
+            hints,
+            normalizedDifficulty,
+            index,
+            'row',
+            index === constructed.anchorRow,
+          ),
         );
         const columnHints = constructed.columnFullHints.map(
-          (hints, index) => selectHints(hints, normalizedDifficulty, index, 'column'),
+          (hints, index) => selectHints(
+            hints,
+            normalizedDifficulty,
+            index,
+            'column',
+            index === constructed.anchorColumn,
+          ),
         );
         const stats = hintSummary(rowHints, columnHints);
         const problem = {
           schemaVersion: 1,
-          generationMethod: 'permuted-ferrers-random-polarity-v2',
+          generationMethod: 'non-uniform-deduction-chain-v3',
           aiUsed: false,
           size: normalizedSize,
           difficulty: normalizedDifficulty,
@@ -912,8 +1050,10 @@
           answer: constructed.rows,
           metrics: {
             generationAttempts: constructed.attempt,
-            colorInverted: constructed.colorInverted,
-            degreeProfile: constructed.colorInverted ? 'fullAnchored' : 'zeroAnchored',
+            anchorRow: constructed.anchorRow,
+            anchorColumn: constructed.anchorColumn,
+            uniformRowCount: 0,
+            uniformColumnCount: 0,
             compoundHintLines: stats.compoundLines,
             symmetryEligibleRowCount: constructed.symmetry.symmetryEligibleRowCount,
             symmetryEligibleColumnCount: constructed.symmetry.symmetryEligibleColumnCount,
@@ -926,15 +1066,18 @@
             },
           },
           validation: {
-            uniqueByAddHints: true,
-            deterministicColorPolarity: true,
+            uniqueByDeductionTrace: true,
+            anchorPattern: constructed.anchorPattern,
+            deductionTrace: constructed.deductionTrace,
             symmetryQualityGate: {
               accepted: constructed.symmetry.accepted,
               maximumRows: constructed.symmetry.maximumSymmetryRows,
               maximumColumns: constructed.symmetry.maximumSymmetryColumns,
               noFullySymmetricAxis: !constructed.symmetry.hasFullySymmetricAxis,
             },
-            rowBlueCounts: constructed.rowDegrees,
+            rowBlueCounts: constructed.rows.map(
+              (row) => [...row].filter((value) => value === '1').length,
+            ),
             columnBlueCounts: constructed.columns.map(
               (column) => [...column].filter((value) => value === '1').length,
             ),
@@ -954,7 +1097,10 @@
         availableHints,
         isSymmetricLine,
         symmetryQuality,
+        createAnchorPattern,
         generateData,
+        matchingLineSolutions,
+        validateDeductionTrace,
         validateConstructedProblem,
       };
 
@@ -1151,7 +1297,7 @@
             `生成完了：一意解検証OK。＋${counts.add}、×${counts.multiply}、S${counts.symmetry}、T${counts.twin}。`
               + ` S成立は行${metrics.symmetryEligibleRowCount}/${Math.floor(currentProblem.size / 2)}以下・`
               + `列${metrics.symmetryEligibleColumnCount}/${Math.floor(currentProblem.size / 2)}以下。`
-              + ` 色極性は${metrics.colorInverted ? '反転' : '標準'}。`
+              + ` 非一様アンカーは${metrics.anchorRow + 1}行・${metrics.anchorColumn + 1}列。`
               + ` 観測チケット${currentProblem.observationTickets}枚。構成試行${metrics.generationAttempts}回。`,
             'success',
           );
