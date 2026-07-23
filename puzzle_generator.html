@@ -168,6 +168,13 @@
       transform: translateY(-1px);
     }
 
+    button:disabled {
+      cursor: not-allowed;
+      filter: grayscale(0.25);
+      opacity: 0.5;
+      transform: none;
+    }
+
     .secondary-button.active {
       border-color: var(--accent);
       background: var(--accent-soft);
@@ -521,10 +528,12 @@
         </div>
         <div class="method-note">
           <strong>一意解の構成方法</strong><br>
-          行と列の青数をそれぞれ0～N-1の重複なしにして、行・列をランダムに並べ替えます。
-          青数0のラインから順に確定が連鎖するため、加算ヒントだけでも解は1つです。
+          行・列をランダムに並べた階段状の基準盤を作り、seedによって盤面全体の青・赤を反転します。
+          青数は0～N-1または1～Nのどちらかとなり、端の青数から確定が連鎖するため、加算ヒントだけでも解は1つです。
+          この色極性の切り替えにより、全赤ラインの`+0 S`は出現する場合としない場合があります。
           正解盤のS成立行数・列数が各軸の半分以下であることを確認した後、×／S／Tを計算して難易度別に採用します。
           全行または全列がSとなる候補は採用しません。
+          観測チケットはこの検証HTML用にEasy 5枚、Normal 3枚、Hard 2枚を付与します。
         </div>
       </aside>
 
@@ -568,6 +577,7 @@
             <span>×：青ラン長の積</span>
             <span>S：反転対称</span>
             <span>T：2マス以上の同長青ランが複数</span>
+            <span>◆：観測済み・編集不可</span>
           </div>
           <div class="toolbar-buttons">
             <span class="ticket-counter" id="ticketCounter">観測 0 / 0</span>
@@ -747,14 +757,18 @@
 
       function constructBoard(size, random) {
         const values = Array.from({ length: size }, (_, index) => index);
+        const colorInverted = random() < 0.5;
         let best = null;
 
         for (let attempt = 1; attempt <= 1000; attempt += 1) {
-          const rowDegrees = shuffled(values, random);
+          const baseRowDegrees = shuffled(values, random);
           const columnRanks = shuffled(values, random);
-          const rows = rowDegrees.map(
+          const baseRows = baseRowDegrees.map(
             (degree) => columnRanks.map((rank) => (rank < degree ? '1' : '0')).join(''),
           );
+          const rows = colorInverted
+            ? baseRows.map((row) => [...row].map((value) => (value === '1' ? '0' : '1')).join(''))
+            : baseRows;
           const columns = columnsFromRows(rows);
           const symmetry = symmetryQuality(rows, columns);
           if (!symmetry.accepted) {
@@ -762,6 +776,9 @@
           }
           const rowFullHints = rows.map(availableHints);
           const columnFullHints = columns.map(availableHints);
+          const rowDegrees = rows.map(
+            (row) => [...row].filter((value) => value === '1').length,
+          );
           const rowS = symmetry.symmetryEligibleRowCount;
           const columnS = symmetry.symmetryEligibleColumnCount;
           const rowT = rowFullHints.filter((hints) => hints.includes('T')).length;
@@ -777,6 +794,7 @@
             rowFullHints,
             columnFullHints,
             symmetry,
+            colorInverted,
             attempt,
             score,
           };
@@ -812,7 +830,6 @@
               + `/${symmetry.maximumSymmetryColumns}）。`,
           );
         }
-        const lines = [...answer, ...columns];
         const shownHints = [...rowHints, ...columnHints];
         const available = [...fullRowHints, ...fullColumnHints];
 
@@ -834,15 +851,27 @@
         const columnDegrees = columns.map(
           (column) => [...column].filter((value) => value === '1').length,
         );
-        const expectedDegrees = Array.from({ length: size }, (_, index) => index);
-        if (JSON.stringify([...rowDegrees].sort((a, b) => a - b)) !== JSON.stringify(expectedDegrees)
-          || JSON.stringify([...columnDegrees].sort((a, b) => a - b)) !== JSON.stringify(expectedDegrees)) {
+        const zeroAnchoredDegrees = Array.from({ length: size }, (_, index) => index);
+        const fullAnchoredDegrees = Array.from({ length: size }, (_, index) => index + 1);
+        const sortedRowDegrees = [...rowDegrees].sort((a, b) => a - b);
+        const sortedColumnDegrees = [...columnDegrees].sort((a, b) => a - b);
+        const isSameDegreeProfile = (degrees, expected) => (
+          JSON.stringify(degrees) === JSON.stringify(expected)
+        );
+        const zeroAnchored = isSameDegreeProfile(sortedRowDegrees, zeroAnchoredDegrees)
+          && isSameDegreeProfile(sortedColumnDegrees, zeroAnchoredDegrees);
+        const fullAnchored = isSameDegreeProfile(sortedRowDegrees, fullAnchoredDegrees)
+          && isSameDegreeProfile(sortedColumnDegrees, fullAnchoredDegrees);
+        if (!zeroAnchored && !fullAnchored) {
           throw new Error('一意解を保証する青数列になっていません。');
         }
 
         answer.forEach((row, rowIndex) => {
           [...row].forEach((value, columnIndex) => {
-            const reconstructed = rowDegrees[rowIndex] + columnDegrees[columnIndex] >= size ? '1' : '0';
+            const degreeSum = rowDegrees[rowIndex] + columnDegrees[columnIndex];
+            const reconstructed = zeroAnchored
+              ? (degreeSum >= size ? '1' : '0')
+              : (degreeSum > size ? '1' : '0');
             if (value !== reconstructed) {
               throw new Error('加算ヒントからの一意再構成に失敗しました。');
             }
@@ -870,7 +899,7 @@
         const stats = hintSummary(rowHints, columnHints);
         const problem = {
           schemaVersion: 1,
-          generationMethod: 'permuted-ferrers-v1',
+          generationMethod: 'permuted-ferrers-random-polarity-v2',
           aiUsed: false,
           size: normalizedSize,
           difficulty: normalizedDifficulty,
@@ -883,6 +912,8 @@
           answer: constructed.rows,
           metrics: {
             generationAttempts: constructed.attempt,
+            colorInverted: constructed.colorInverted,
+            degreeProfile: constructed.colorInverted ? 'fullAnchored' : 'zeroAnchored',
             compoundHintLines: stats.compoundLines,
             symmetryEligibleRowCount: constructed.symmetry.symmetryEligibleRowCount,
             symmetryEligibleColumnCount: constructed.symmetry.symmetryEligibleColumnCount,
@@ -896,6 +927,7 @@
           },
           validation: {
             uniqueByAddHints: true,
+            deterministicColorPolarity: true,
             symmetryQualityGate: {
               accepted: constructed.symmetry.accepted,
               maximumRows: constructed.symmetry.maximumSymmetryRows,
@@ -1117,7 +1149,9 @@
           const metrics = currentProblem.metrics;
           setMessage(
             `生成完了：一意解検証OK。＋${counts.add}、×${counts.multiply}、S${counts.symmetry}、T${counts.twin}。`
-              + ` S成立は行${metrics.symmetryEligibleRowCount}・列${metrics.symmetryEligibleColumnCount}。`
+              + ` S成立は行${metrics.symmetryEligibleRowCount}/${Math.floor(currentProblem.size / 2)}以下・`
+              + `列${metrics.symmetryEligibleColumnCount}/${Math.floor(currentProblem.size / 2)}以下。`
+              + ` 色極性は${metrics.colorInverted ? '反転' : '標準'}。`
               + ` 観測チケット${currentProblem.observationTickets}枚。構成試行${metrics.generationAttempts}回。`,
             'success',
           );
