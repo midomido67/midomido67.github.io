@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quantum Grid - AI不要問題ジェネレーター</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f6fbff;
+      --panel: #ffffff;
+      --panel-2: #edf8ff;
+      --line: #b9dcef;
+      --text: #17324d;
+      --muted: #5f7890;
+      --blue: #48b9f2;
+      --red: #ff8293;
+      --accent: #16a782;
+      --accent-soft: #ddf8ef;
+      --warning: #f3b72e;
+      --shadow: rgba(70, 126, 160, 0.18);
+      --cell-size: 34px;
+      --row-hint-width: 172px;
+      --column-hint-height: 132px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 980px;
+      margin: 0;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(72, 185, 242, 0.22), transparent 32%),
+        radial-gradient(circle at 90% 12%, rgba(255, 210, 102, 0.2), transparent 27%),
+        linear-gradient(145deg, #f8fcff, #eaf8ff 55%, #fffdf6);
+      color: var(--text);
+      font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+    }
+
+    button,
+    select {
+      font: inherit;
+    }
+
+    .page {
+      width: min(1500px, calc(100% - 48px));
+      margin: 24px auto 48px;
+    }
+
+    .hero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 32px;
+      margin-bottom: 20px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      letter-spacing: 0.04em;
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .no-ai-badge {
+      flex: 0 0 auto;
+      padding: 10px 16px;
+      border: 1px solid rgba(120, 224, 189, 0.55);
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    .generator-layout {
+      display: grid;
+      grid-template-columns: 310px minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 18px 50px var(--shadow);
+    }
+
+    .settings {
+      position: sticky;
+      top: 20px;
+      padding: 20px;
+    }
+
+    .panel-title {
+      margin: 0 0 16px;
+      font-size: 17px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    select {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      outline: none;
+      background: #ffffff;
+      color: var(--text);
+    }
+
+    select:focus {
+      border-color: var(--blue);
+    }
+
+    .primary-button,
+    .secondary-button {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .primary-button {
+      border: 0;
+      background: linear-gradient(135deg, #42baf2, #7be0d0);
+      color: #0d3d50;
+      box-shadow: 0 8px 18px rgba(64, 178, 225, 0.22);
+    }
+
+    .secondary-button {
+      border: 1px solid var(--line);
+      background: #f7fcff;
+      color: var(--text);
+    }
+
+    .primary-button:hover,
+    .secondary-button:hover {
+      filter: brightness(0.98);
+      transform: translateY(-1px);
+    }
+
+    .secondary-button.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: #087b60;
+      box-shadow: 0 0 0 3px rgba(22, 167, 130, 0.12);
+    }
+
+    button:focus-visible,
+    select:focus-visible {
+      outline: 3px solid rgba(72, 185, 242, 0.3);
+      outline-offset: 2px;
+    }
+
+    .button-stack {
+      display: grid;
+      gap: 9px;
+    }
+
+    .method-note {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .method-note strong {
+      color: var(--text);
+    }
+
+    .workspace {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(110px, 1fr));
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-item {
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--panel-2);
+    }
+
+    .summary-label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .summary-value {
+      display: block;
+      overflow: hidden;
+      font-size: 15px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message {
+      min-height: 45px;
+      margin: 14px;
+      padding: 11px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f7fcff;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .message.success {
+      border-color: rgba(22, 167, 130, 0.45);
+      background: #edfbf6;
+      color: var(--accent);
+    }
+
+    .message.error {
+      border-color: rgba(232, 84, 105, 0.45);
+      background: #fff1f3;
+      color: #c6374d;
+    }
+
+    .board-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 14px 14px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend i {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 5px;
+      border-radius: 2px;
+    }
+
+    .toolbar-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ticket-counter {
+      min-width: 112px;
+      padding: 8px 12px;
+      border: 1px solid #f0ce70;
+      border-radius: 999px;
+      background: #fff8d9;
+      color: #7a5a00;
+      font-size: 12px;
+      font-weight: 900;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .toolbar-buttons .secondary-button {
+      width: auto;
+      min-height: 36px;
+      padding: 7px 13px;
+    }
+
+    .board-scroll {
+      max-width: 100%;
+      max-height: 780px;
+      overflow: auto;
+      padding: 14px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(rgba(246, 251, 255, 0.88), rgba(246, 251, 255, 0.88)),
+        repeating-linear-gradient(45deg, #dff3ff 0, #dff3ff 10px, #eef9ff 10px, #eef9ff 20px);
+    }
+
+    .puzzle-grid {
+      display: grid;
+      width: max-content;
+      min-width: 100%;
+      justify-content: center;
+      grid-template-columns: var(--row-hint-width) repeat(var(--grid-size), var(--cell-size));
+      grid-template-rows: var(--column-hint-height) repeat(var(--grid-size), var(--cell-size));
+      gap: 2px;
+    }
+
+    .corner,
+    .hint-cell {
+      border: 1px solid var(--line);
+      background: #f2faff;
+    }
+
+    .corner {
+      display: grid;
+      place-items: center;
+      border-radius: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .hint-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .hint-cell.column {
+      flex-direction: column;
+      padding: 5px 2px;
+    }
+
+    .hint-cell.row {
+      justify-content: flex-end;
+      padding: 2px 9px;
+    }
+
+    .hint-chip {
+      display: inline-grid;
+      min-width: 27px;
+      min-height: 24px;
+      place-items: center;
+      padding: 2px 5px;
+      border: 1px solid #395a7d;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #285370;
+      font-size: 11px;
+      font-weight: 900;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .hint-chip.rule {
+      border-color: rgba(22, 167, 130, 0.42);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .cell {
+      position: relative;
+      width: var(--cell-size);
+      height: var(--cell-size);
+      padding: 0;
+      border: 1px solid #9fcce3;
+      background: #ffffff;
+      cursor: pointer;
+    }
+
+    .cell:hover {
+      z-index: 1;
+      outline: 2px solid var(--warning);
+    }
+
+    .cell.blue {
+      background: var(--blue);
+    }
+
+    .cell.red {
+      background:
+        linear-gradient(45deg, transparent 45%, rgba(255, 255, 255, 0.65) 46%, rgba(255, 255, 255, 0.65) 54%, transparent 55%),
+        linear-gradient(-45deg, transparent 45%, rgba(255, 255, 255, 0.65) 46%, rgba(255, 255, 255, 0.65) 54%, transparent 55%),
+        var(--red);
+    }
+
+    .puzzle-grid.is-observing .cell:not(.observed) {
+      z-index: 1;
+      outline: 2px solid var(--warning);
+      outline-offset: -3px;
+      cursor: crosshair;
+    }
+
+    .cell.observed {
+      border-color: #c09112;
+      box-shadow: inset 0 0 0 3px rgba(255, 234, 150, 0.92);
+      cursor: not-allowed;
+    }
+
+    .cell.observed::before {
+      position: absolute;
+      top: 2px;
+      right: 3px;
+      z-index: 2;
+      color: #7b5900;
+      content: "◆";
+      font-size: 8px;
+      text-shadow: 0 1px 1px rgba(255, 255, 255, 0.85);
+    }
+
+    .cell.show-answer::after {
+      position: absolute;
+      inset: 5px;
+      display: grid;
+      place-items: center;
+      border: 2px dashed rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      color: white;
+      content: attr(data-answer-mark);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .details-area {
+      padding: 16px;
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f7fcff;
+    }
+
+    summary {
+      padding: 12px 14px;
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    pre {
+      max-height: 430px;
+      margin: 0;
+      overflow: auto;
+      padding: 14px;
+      border-top: 1px solid var(--line);
+      color: #315c78;
+      font: 12px/1.55 Consolas, monospace;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Deterministic Puzzle Construction</p>
+        <h1>Quantum Grid 問題ジェネレーター</h1>
+        <p class="lead">
+          サイズと難易度を選ぶと、ブラウザ内の決定的なアルゴリズムだけで正解盤とヒントを生成します。
+          Easy／Normal／Hardは観測なしでも一意解となり、観測チケットは任意の補助として使用できます。
+        </p>
+      </div>
+      <div class="no-ai-badge">生成AI・通信 不使用</div>
+    </header>
+
+    <div class="generator-layout">
+      <aside class="panel settings">
+        <h2 class="panel-title">生成条件</h2>
+        <div class="field">
+          <label for="sizeSelect">盤面サイズ</label>
+          <select id="sizeSelect">
+            <option value="6">6 × 6</option>
+            <option value="8">8 × 8</option>
+            <option value="10">10 × 10</option>
+            <option value="12">12 × 12</option>
+            <option value="16">16 × 16</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="difficultySelect">難易度</label>
+          <select id="difficultySelect">
+            <option value="easy">Easy</option>
+            <option value="normal">Normal</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        <div class="button-stack">
+          <button class="primary-button" id="generateBtn" type="button">新しい問題を自動生成</button>
+          <button class="secondary-button" id="resetBtn" type="button">入力をリセット</button>
+          <button class="secondary-button" id="judgeBtn" type="button">盤面を判定</button>
+        </div>
+        <div class="method-note">
+          <strong>一意解の構成方法</strong><br>
+          行と列の青数をそれぞれ0～N-1の重複なしにして、行・列をランダムに並べ替えます。
+          青数0のラインから順に確定が連鎖するため、加算ヒントだけでも解は1つです。
+          正解盤のS成立行数・列数が各軸の半分以下であることを確認した後、×／S／Tを計算して難易度別に採用します。
+          全行または全列がSとなる候補は採用しません。
+        </div>
+      </aside>
+
+      <section class="panel workspace">
+        <div class="summary" aria-label="生成結果">
+          <div class="summary-item">
+            <span class="summary-label">SIZE</span>
+            <span class="summary-value" id="sizeOutput">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">DIFFICULTY</span>
+            <span class="summary-value" id="difficultyOutput">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">UNIQUE</span>
+            <span class="summary-value" id="uniqueOutput">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">HINTS</span>
+            <span class="summary-value" id="hintOutput">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">TICKETS</span>
+            <span class="summary-value" id="ticketOutput">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">SEED</span>
+            <span class="summary-value" id="seedOutput">—</span>
+          </div>
+        </div>
+
+        <div class="message" id="message" role="status" aria-live="polite">
+          生成条件を選び、「新しい問題を自動生成」を押してください。
+        </div>
+
+        <div class="board-toolbar">
+          <div class="legend">
+            <span><i style="background:var(--blue)"></i>青</span>
+            <span><i style="background:var(--red)"></i>赤</span>
+            <span>＋：青総数</span>
+            <span>×：青ラン長の積</span>
+            <span>S：反転対称</span>
+            <span>T：2マス以上の同長青ランが複数</span>
+          </div>
+          <div class="toolbar-buttons">
+            <span class="ticket-counter" id="ticketCounter">観測 0 / 0</span>
+            <button class="secondary-button" id="observeBtn" type="button" aria-pressed="false">観測する</button>
+            <button class="secondary-button" id="answerBtn" type="button">正解を表示</button>
+          </div>
+        </div>
+
+        <div class="board-scroll">
+          <div class="puzzle-grid" id="puzzleGrid" aria-label="生成されたパズル盤面"></div>
+        </div>
+
+        <div class="details-area">
+          <details>
+            <summary>生成データと検証結果を表示</summary>
+            <pre id="jsonOutput"></pre>
+          </details>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const SUPPORTED_SIZES = [6, 8, 10, 12, 16];
+      const SUPPORTED_DIFFICULTIES = ['easy', 'normal', 'hard'];
+      const DIFFICULTY_LABELS = {
+        easy: 'EASY',
+        normal: 'NORMAL',
+        hard: 'HARD',
+      };
+      const OBSERVATION_TICKETS = {
+        easy: 5,
+        normal: 3,
+        hard: 2,
+      };
+
+      function createRandom(seed) {
+        let state = seed >>> 0;
+        return () => {
+          state += 0x6D2B79F5;
+          let value = state;
+          value = Math.imul(value ^ (value >>> 15), value | 1);
+          value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+          return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function randomSeed() {
+        if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+          const values = new Uint32Array(1);
+          globalThis.crypto.getRandomValues(values);
+          return values[0] >>> 0;
+        }
+        return (Date.now() ^ Math.floor(Math.random() * 0xFFFFFFFF)) >>> 0;
+      }
+
+      function shuffled(values, random) {
+        const result = [...values];
+        for (let index = result.length - 1; index > 0; index -= 1) {
+          const target = Math.floor(random() * (index + 1));
+          [result[index], result[target]] = [result[target], result[index]];
+        }
+        return result;
+      }
+
+      function blueRuns(line) {
+        const runs = [];
+        let current = 0;
+        for (const value of line) {
+          if (value === '1') {
+            current += 1;
+          } else if (current > 0) {
+            runs.push(current);
+            current = 0;
+          }
+        }
+        if (current > 0) {
+          runs.push(current);
+        }
+        return runs;
+      }
+
+      function isSymmetricLine(line) {
+        return line === [...line].reverse().join('');
+      }
+
+      function symmetryQuality(rows, columns = columnsFromRows(rows)) {
+        const symmetryEligibleRowCount = rows.filter(isSymmetricLine).length;
+        const symmetryEligibleColumnCount = columns.filter(isSymmetricLine).length;
+        const maximumSymmetryRows = Math.floor(rows.length / 2);
+        const maximumSymmetryColumns = Math.floor(columns.length / 2);
+        const hasFullySymmetricAxis = symmetryEligibleRowCount === rows.length
+          || symmetryEligibleColumnCount === columns.length;
+        return {
+          symmetryEligibleRowCount,
+          symmetryEligibleColumnCount,
+          maximumSymmetryRows,
+          maximumSymmetryColumns,
+          hasFullySymmetricAxis,
+          accepted: !hasFullySymmetricAxis
+            && symmetryEligibleRowCount <= maximumSymmetryRows
+            && symmetryEligibleColumnCount <= maximumSymmetryColumns,
+        };
+      }
+
+      function availableHints(line) {
+        const runs = blueRuns(line);
+        const hints = [`+${[...line].filter((value) => value === '1').length}`];
+        if (runs.length >= 2) {
+          hints.push(`×${runs.reduce((product, run) => product * run, 1)}`);
+        }
+        if (isSymmetricLine(line)) {
+          hints.push('S');
+        }
+        if (runs.length >= 2
+          && runs.every((run) => run >= 2)
+          && runs.every((run) => run === runs[0])) {
+          hints.push('T');
+        }
+        return hints;
+      }
+
+      function columnsFromRows(rows) {
+        return Array.from(
+          { length: rows.length },
+          (_, column) => rows.map((row) => row[column]).join(''),
+        );
+      }
+
+      function hintSummary(rowHints, columnHints) {
+        const all = [...rowHints, ...columnHints];
+        const counts = { add: 0, multiply: 0, symmetry: 0, twin: 0 };
+        all.flat().forEach((hint) => {
+          if (hint.startsWith('+')) counts.add += 1;
+          if (hint.startsWith('×')) counts.multiply += 1;
+          if (hint === 'S') counts.symmetry += 1;
+          if (hint === 'T') counts.twin += 1;
+        });
+        return {
+          ...counts,
+          total: all.flat().length,
+          compoundLines: all.filter((hints) => hints.length >= 2).length,
+        };
+      }
+
+      function selectHints(fullHints, difficulty, lineIndex, axis) {
+        if (difficulty === 'easy') {
+          return [...fullHints];
+        }
+
+        const add = fullHints[0];
+        const multiply = fullHints.find((hint) => hint.startsWith('×'));
+        const placement = fullHints.filter((hint) => hint === 'S' || hint === 'T');
+
+        if (difficulty === 'normal') {
+          const selected = [add];
+          if (multiply) {
+            selected.push(multiply);
+          }
+          if (placement.length > 0) {
+            selected.push(placement[(lineIndex + (axis === 'column' ? 1 : 0)) % placement.length]);
+          }
+          return [...new Set(selected)].slice(0, 3);
+        }
+
+        const selected = [add];
+        if (placement.length > 0) {
+          selected.push(placement[(lineIndex + (axis === 'column' ? 1 : 0)) % placement.length]);
+        } else if (multiply && (lineIndex + (axis === 'column' ? 2 : 0)) % 3 === 0) {
+          selected.push(multiply);
+        }
+        return [...new Set(selected)];
+      }
+
+      function constructBoard(size, random) {
+        const values = Array.from({ length: size }, (_, index) => index);
+        let best = null;
+
+        for (let attempt = 1; attempt <= 1000; attempt += 1) {
+          const rowDegrees = shuffled(values, random);
+          const columnRanks = shuffled(values, random);
+          const rows = rowDegrees.map(
+            (degree) => columnRanks.map((rank) => (rank < degree ? '1' : '0')).join(''),
+          );
+          const columns = columnsFromRows(rows);
+          const symmetry = symmetryQuality(rows, columns);
+          if (!symmetry.accepted) {
+            continue;
+          }
+          const rowFullHints = rows.map(availableHints);
+          const columnFullHints = columns.map(availableHints);
+          const rowS = symmetry.symmetryEligibleRowCount;
+          const columnS = symmetry.symmetryEligibleColumnCount;
+          const rowT = rowFullHints.filter((hints) => hints.includes('T')).length;
+          const columnT = columnFullHints.filter((hints) => hints.includes('T')).length;
+          const score = (rowT > 0 ? 1000 : 0)
+            + (columnT > 0 ? 1000 : 0)
+            - ((rowS - 1) + (columnS - 1)) * 20;
+          const candidate = {
+            rows,
+            columns,
+            rowDegrees,
+            columnRanks,
+            rowFullHints,
+            columnFullHints,
+            symmetry,
+            attempt,
+            score,
+          };
+
+          if (!best || candidate.score > best.score) {
+            best = candidate;
+          }
+          if (rowS === 1 && columnS === 1 && rowT > 0 && columnT > 0) {
+            return candidate;
+          }
+        }
+        if (!best) {
+          throw new Error('S成立ライン品質ゲートを満たす正解盤を生成できませんでした。');
+        }
+        return best;
+      }
+
+      function validateConstructedProblem(problem, fullRowHints, fullColumnHints) {
+        const { size, difficulty, answer, rowHints, columnHints } = problem;
+        if (!SUPPORTED_SIZES.includes(size) || !SUPPORTED_DIFFICULTIES.includes(difficulty)) {
+          throw new Error('未対応の生成条件です。');
+        }
+        if (answer.length !== size || rowHints.length !== size || columnHints.length !== size) {
+          throw new Error('盤面またはヒントのサイズが一致しません。');
+        }
+
+        const columns = columnsFromRows(answer);
+        const symmetry = symmetryQuality(answer, columns);
+        if (!symmetry.accepted) {
+          throw new Error(
+            `S成立ライン品質ゲート違反です（行${symmetry.symmetryEligibleRowCount}`
+              + `/${symmetry.maximumSymmetryRows}、列${symmetry.symmetryEligibleColumnCount}`
+              + `/${symmetry.maximumSymmetryColumns}）。`,
+          );
+        }
+        const lines = [...answer, ...columns];
+        const shownHints = [...rowHints, ...columnHints];
+        const available = [...fullRowHints, ...fullColumnHints];
+
+        shownHints.forEach((hints, index) => {
+          if (hints.length < 1 || hints.length > 4 || new Set(hints).size !== hints.length) {
+            throw new Error(`${index + 1}番目のラインのヒント数または重複が不正です。`);
+          }
+          if (hints.some((hint) => !available[index].includes(hint))) {
+            throw new Error(`${index + 1}番目のラインに正解盤と一致しないヒントがあります。`);
+          }
+          if (difficulty === 'easy'
+            && (hints.length !== available[index].length
+              || available[index].some((hint) => !hints.includes(hint)))) {
+            throw new Error(`${index + 1}番目のEasyラインでヒントが省略されています。`);
+          }
+        });
+
+        const rowDegrees = answer.map((row) => [...row].filter((value) => value === '1').length);
+        const columnDegrees = columns.map(
+          (column) => [...column].filter((value) => value === '1').length,
+        );
+        const expectedDegrees = Array.from({ length: size }, (_, index) => index);
+        if (JSON.stringify([...rowDegrees].sort((a, b) => a - b)) !== JSON.stringify(expectedDegrees)
+          || JSON.stringify([...columnDegrees].sort((a, b) => a - b)) !== JSON.stringify(expectedDegrees)) {
+          throw new Error('一意解を保証する青数列になっていません。');
+        }
+
+        answer.forEach((row, rowIndex) => {
+          [...row].forEach((value, columnIndex) => {
+            const reconstructed = rowDegrees[rowIndex] + columnDegrees[columnIndex] >= size ? '1' : '0';
+            if (value !== reconstructed) {
+              throw new Error('加算ヒントからの一意再構成に失敗しました。');
+            }
+          });
+        });
+
+        if (shownHints.some((hints) => !hints[0].startsWith('+'))) {
+          throw new Error('標準難易度の一意解を保証する加算ヒントが不足しています。');
+        }
+        return true;
+      }
+
+      function generateData(size, difficulty, seed) {
+        const normalizedSize = Number(size);
+        const normalizedDifficulty = String(difficulty).toLowerCase();
+        const normalizedSeed = Number(seed) >>> 0;
+        const random = createRandom(normalizedSeed);
+        const constructed = constructBoard(normalizedSize, random);
+        const rowHints = constructed.rowFullHints.map(
+          (hints, index) => selectHints(hints, normalizedDifficulty, index, 'row'),
+        );
+        const columnHints = constructed.columnFullHints.map(
+          (hints, index) => selectHints(hints, normalizedDifficulty, index, 'column'),
+        );
+        const stats = hintSummary(rowHints, columnHints);
+        const problem = {
+          schemaVersion: 1,
+          generationMethod: 'permuted-ferrers-v1',
+          aiUsed: false,
+          size: normalizedSize,
+          difficulty: normalizedDifficulty,
+          seed: normalizedSeed,
+          candidateCount: 1,
+          observationRequired: 0,
+          observationTickets: OBSERVATION_TICKETS[normalizedDifficulty],
+          rowHints,
+          columnHints,
+          answer: constructed.rows,
+          metrics: {
+            generationAttempts: constructed.attempt,
+            compoundHintLines: stats.compoundLines,
+            symmetryEligibleRowCount: constructed.symmetry.symmetryEligibleRowCount,
+            symmetryEligibleColumnCount: constructed.symmetry.symmetryEligibleColumnCount,
+            displayedSymmetryHintLineCount: stats.symmetry,
+            hintTypeCounts: {
+              add: stats.add,
+              multiply: stats.multiply,
+              symmetry: stats.symmetry,
+              twin: stats.twin,
+            },
+          },
+          validation: {
+            uniqueByAddHints: true,
+            symmetryQualityGate: {
+              accepted: constructed.symmetry.accepted,
+              maximumRows: constructed.symmetry.maximumSymmetryRows,
+              maximumColumns: constructed.symmetry.maximumSymmetryColumns,
+              noFullySymmetricAxis: !constructed.symmetry.hasFullySymmetricAxis,
+            },
+            rowBlueCounts: constructed.rowDegrees,
+            columnBlueCounts: constructed.columns.map(
+              (column) => [...column].filter((value) => value === '1').length,
+            ),
+          },
+        };
+        validateConstructedProblem(
+          problem,
+          constructed.rowFullHints,
+          constructed.columnFullHints,
+        );
+        return problem;
+      }
+
+      globalThis.quantumGridGenerator = {
+        supportedSizes: [...SUPPORTED_SIZES],
+        supportedDifficulties: [...SUPPORTED_DIFFICULTIES],
+        availableHints,
+        isSymmetricLine,
+        symmetryQuality,
+        generateData,
+        validateConstructedProblem,
+      };
+
+      if (typeof document === 'undefined') {
+        return;
+      }
+
+      const sizeSelect = document.getElementById('sizeSelect');
+      const difficultySelect = document.getElementById('difficultySelect');
+      const grid = document.getElementById('puzzleGrid');
+      const message = document.getElementById('message');
+      const answerButton = document.getElementById('answerBtn');
+      const observeButton = document.getElementById('observeBtn');
+      const ticketCounter = document.getElementById('ticketCounter');
+      let currentProblem = null;
+      let playerBoard = [];
+      let showingAnswer = false;
+      let observationMode = false;
+      let initialTickets = 0;
+      let remainingTickets = 0;
+      let observedCells = new Set();
+
+      function setMessage(text, type = '') {
+        message.textContent = text;
+        message.className = `message${type ? ` ${type}` : ''}`;
+      }
+
+      function createHintChip(value) {
+        const chip = document.createElement('span');
+        chip.className = `hint-chip${value === 'S' || value === 'T' ? ' rule' : ''}`;
+        chip.textContent = value;
+        return chip;
+      }
+
+      function createHintCell(hints, direction, lineIndex) {
+        const cell = document.createElement('div');
+        cell.className = `hint-cell ${direction}`;
+        cell.setAttribute(
+          'aria-label',
+          `${lineIndex + 1}${direction === 'row' ? '行' : '列'}のヒント ${hints.join('、')}`,
+        );
+        hints.forEach((hint) => cell.appendChild(createHintChip(hint)));
+        return cell;
+      }
+
+      function updateProgressMessage() {
+        if (!currentProblem) return;
+        const filled = playerBoard.flat().filter((value) => value !== 'unknown').length;
+        const total = currentProblem.size * currentProblem.size;
+        setMessage(
+          `入力 ${filled} / ${total}マス、観測チケット残り${remainingTickets}枚。`
+            + ' セルは「未確定 → 青 → 赤」の順に切り替わります。',
+        );
+      }
+
+      function updateTicketDisplay() {
+        ticketCounter.textContent = `観測 ${remainingTickets} / ${initialTickets}`;
+        document.getElementById('ticketOutput').textContent = `${remainingTickets} / ${initialTickets}`;
+        observeButton.disabled = remainingTickets <= 0;
+      }
+
+      function setObservationMode(enabled) {
+        observationMode = Boolean(enabled) && remainingTickets > 0;
+        grid.classList.toggle('is-observing', observationMode);
+        observeButton.classList.toggle('active', observationMode);
+        observeButton.setAttribute('aria-pressed', String(observationMode));
+        observeButton.textContent = observationMode ? '観測をやめる' : '観測する';
+      }
+
+      function hideAnswer() {
+        showingAnswer = false;
+        grid.querySelectorAll('.cell').forEach((cell) => {
+          cell.classList.remove('show-answer');
+        });
+        answerButton.textContent = '正解を表示';
+      }
+
+      function cycleCell(button, row, column) {
+        const key = `${row}:${column}`;
+        if (observedCells.has(key)) {
+          setMessage('観測済みのマスは変更できません。', 'error');
+          return;
+        }
+        const current = playerBoard[row][column];
+        const next = current === 'unknown' ? 'blue' : current === 'blue' ? 'red' : 'unknown';
+        playerBoard[row][column] = next;
+        button.classList.remove('blue', 'red');
+        if (next !== 'unknown') {
+          button.classList.add(next);
+        }
+        button.setAttribute('aria-label', `${row + 1}行${column + 1}列 ${next}`);
+        updateProgressMessage();
+      }
+
+      function observeCell(button, row, column) {
+        if (remainingTickets <= 0) {
+          setObservationMode(false);
+          setMessage('観測チケットが残っていません。', 'error');
+          return;
+        }
+        const key = `${row}:${column}`;
+        if (observedCells.has(key)) {
+          setMessage('このマスは観測済みです。別のマスを選んでください。', 'error');
+          return;
+        }
+
+        const revealed = currentProblem.answer[row][column] === '1' ? 'blue' : 'red';
+        playerBoard[row][column] = revealed;
+        observedCells.add(key);
+        remainingTickets -= 1;
+        button.classList.remove('blue', 'red');
+        button.classList.add(revealed, 'observed');
+        button.setAttribute(
+          'aria-label',
+          `${row + 1}行${column + 1}列 観測済み ${revealed === 'blue' ? '青' : '赤'}、編集不可`,
+        );
+        button.setAttribute('aria-disabled', 'true');
+        setObservationMode(false);
+        updateTicketDisplay();
+        setMessage(
+          `${row + 1}行${column + 1}列を観測し、`
+            + `${revealed === 'blue' ? '青' : '赤'}で固定しました。残り${remainingTickets}枚です。`,
+          'success',
+        );
+      }
+
+      function handleCellClick(button, row, column) {
+        if (observationMode) {
+          observeCell(button, row, column);
+          return;
+        }
+        cycleCell(button, row, column);
+      }
+
+      function renderBoard(problem) {
+        const { size } = problem;
+        grid.innerHTML = '';
+        grid.style.setProperty('--grid-size', String(size));
+        playerBoard = Array.from({ length: size }, () => Array(size).fill('unknown'));
+        initialTickets = problem.observationTickets;
+        remainingTickets = initialTickets;
+        observedCells = new Set();
+        setObservationMode(false);
+        hideAnswer();
+        updateTicketDisplay();
+
+        const corner = document.createElement('div');
+        corner.className = 'corner';
+        corner.innerHTML = '列ヒント ↑<br>行ヒント →';
+        grid.appendChild(corner);
+        problem.columnHints.forEach(
+          (hints, index) => grid.appendChild(createHintCell(hints, 'column', index)),
+        );
+
+        for (let row = 0; row < size; row += 1) {
+          grid.appendChild(createHintCell(problem.rowHints[row], 'row', row));
+          for (let column = 0; column < size; column += 1) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'cell';
+            button.dataset.row = String(row);
+            button.dataset.column = String(column);
+            button.dataset.answer = problem.answer[row][column];
+            button.dataset.answerMark = problem.answer[row][column] === '1' ? '●' : '×';
+            button.setAttribute('aria-label', `${row + 1}行${column + 1}列 未確定`);
+            button.addEventListener('click', () => handleCellClick(button, row, column));
+            grid.appendChild(button);
+          }
+        }
+      }
+
+      function renderSummary(problem) {
+        const stats = hintSummary(problem.rowHints, problem.columnHints);
+        document.getElementById('sizeOutput').textContent = `${problem.size} × ${problem.size}`;
+        document.getElementById('difficultyOutput').textContent = DIFFICULTY_LABELS[problem.difficulty];
+        document.getElementById('uniqueOutput').textContent = '1候補・観測不要';
+        document.getElementById('hintOutput').textContent = `${stats.total}個 / 複合${stats.compoundLines}本`;
+        document.getElementById('ticketOutput').textContent = `${problem.observationTickets}枚`;
+        document.getElementById('seedOutput').textContent = String(problem.seed);
+        document.getElementById('jsonOutput').textContent = JSON.stringify(problem, null, 2);
+      }
+
+      function generate() {
+        try {
+          const size = Number(sizeSelect.value);
+          const difficulty = difficultySelect.value;
+          const seed = randomSeed();
+          currentProblem = generateData(size, difficulty, seed);
+          renderSummary(currentProblem);
+          renderBoard(currentProblem);
+          const counts = currentProblem.metrics.hintTypeCounts;
+          const metrics = currentProblem.metrics;
+          setMessage(
+            `生成完了：一意解検証OK。＋${counts.add}、×${counts.multiply}、S${counts.symmetry}、T${counts.twin}。`
+              + ` S成立は行${metrics.symmetryEligibleRowCount}・列${metrics.symmetryEligibleColumnCount}。`
+              + ` 観測チケット${currentProblem.observationTickets}枚。構成試行${metrics.generationAttempts}回。`,
+            'success',
+          );
+        } catch (error) {
+          setMessage(`生成に失敗しました：${String(error.message || error)}`, 'error');
+        }
+      }
+
+      function resetInputs() {
+        if (!currentProblem) return;
+        setObservationMode(false);
+        hideAnswer();
+        playerBoard = Array.from({ length: currentProblem.size }, (_, row) => (
+          Array.from({ length: currentProblem.size }, (_, column) => {
+            const key = `${row}:${column}`;
+            if (!observedCells.has(key)) return 'unknown';
+            return currentProblem.answer[row][column] === '1' ? 'blue' : 'red';
+          })
+        ));
+        grid.querySelectorAll('.cell').forEach((cell) => {
+          if (!cell.classList.contains('observed')) {
+            cell.classList.remove('blue', 'red');
+          }
+        });
+        updateProgressMessage();
+      }
+
+      function judge() {
+        if (!currentProblem) return;
+        const unknown = playerBoard.flat().filter((value) => value === 'unknown').length;
+        if (unknown > 0) {
+          setMessage(`未確定のマスが${unknown}個あります。`, 'error');
+          return;
+        }
+        const correct = playerBoard.every(
+          (row, rowIndex) => row.every(
+            (value, columnIndex) => value
+              === (currentProblem.answer[rowIndex][columnIndex] === '1' ? 'blue' : 'red'),
+          ),
+        );
+        setMessage(
+          correct ? '正解です。一意解の正解盤と一致しました。' : '正解盤とは異なっています。',
+          correct ? 'success' : 'error',
+        );
+      }
+
+      function toggleAnswer() {
+        if (!currentProblem) return;
+        setObservationMode(false);
+        showingAnswer = !showingAnswer;
+        grid.querySelectorAll('.cell').forEach((cell) => {
+          cell.classList.toggle('show-answer', showingAnswer);
+        });
+        answerButton.textContent = showingAnswer ? '正解を隠す' : '正解を表示';
+      }
+
+      function toggleObservation() {
+        if (!currentProblem) return;
+        if (remainingTickets <= 0) {
+          setMessage('観測チケットが残っていません。', 'error');
+          return;
+        }
+        if (observationMode) {
+          setObservationMode(false);
+          updateProgressMessage();
+          return;
+        }
+        hideAnswer();
+        setObservationMode(true);
+        setMessage(`観測するマスを1つ選んでください。残り${remainingTickets}枚です。`);
+      }
+
+      document.getElementById('generateBtn').addEventListener('click', generate);
+      document.getElementById('resetBtn').addEventListener('click', resetInputs);
+      document.getElementById('judgeBtn').addEventListener('click', judge);
+      observeButton.addEventListener('click', toggleObservation);
+      answerButton.addEventListener('click', toggleAnswer);
+      generate();
+    })();
+  </script>
+</body>
+</html>
